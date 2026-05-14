@@ -14,13 +14,13 @@ A simple tool to convert any website into an Android APK without requiring Andro
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Jipok/website-to-apk
+git clone https://github.com/IKatzover/web-to-apk
 cd website-to-apk
 ```
 
 2. Create a configuration file `webapk.conf`:
 ```ini
-id = myapp                          # Application ID (will be com.myapp.webtoapk)
+id = com.myapp.webtoapk             # Application ID (will be com.myapp.webtoapk)
 name = My App Name                  # Display name of the app
 mainURL = https://example.com       # Target website URL
 icon = example.png                  # Path to your app icon (PNG format)
