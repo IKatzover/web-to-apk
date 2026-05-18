@@ -75,16 +75,14 @@ import androidx.annotation.NonNull;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import android.graphics.Color;
 import androidx.core.graphics.Insets;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-import android.content.BroadcastReceiver;
-import android.content.IntentFilter;
 import android.webkit.PermissionRequest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
-
+import android.app.AlarmManager;
+import android.os.SystemClock;
 
 public class MainActivity extends AppCompatActivity {
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
@@ -222,16 +220,13 @@ public class MainActivity extends AppCompatActivity {
 
         switch (cacheMode) {
             case "aggressive":
-                // Offline-first: Use cache if content is there, otherwise load from network.
                 webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
                 break;
             case "no_cache":
-                // Always load from the network, do not use the cache
                 webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
                 webview.clearCache(true);
                 break;
             default:
-                // Uses cache based on server's "Cache-Control" headers
                 webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
                 break;
         }
@@ -250,9 +245,8 @@ public class MainActivity extends AppCompatActivity {
                 Uri[] results = null;
 
                 if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                    Intent intentData = result.getData(); // Переименовали с data на intentData
+                    Intent intentData = result.getData();
 
-                    // Обработка множественного выбора
                     if (intentData.getClipData() != null) {
                         int count = intentData.getClipData().getItemCount();
                         results = new Uri[count];
@@ -260,7 +254,6 @@ public class MainActivity extends AppCompatActivity {
                             results[i] = intentData.getClipData().getItemAt(i).getUri();
                         }
                     } else if (intentData.getData() != null) {
-                        // Один файл
                         results = new Uri[]{intentData.getData()};
                     }
                 }
@@ -278,23 +271,17 @@ public class MainActivity extends AppCompatActivity {
             public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
                 DownloadManager downloadManager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
 
-                // Create a request for the download
                 DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                 request.setMimeType(mimetype);
 
-                // Set cookies for the download request, it's important for authorized downloads
                 String cookies = CookieManager.getInstance().getCookie(url);
                 request.addRequestHeader("cookie", cookies);
                 request.addRequestHeader("User-Agent", userAgent);
 
-                // Set download description and title using string resources
-                request.setDescription(getString(R.string.download_description)); // Use string resource
+                request.setDescription(getString(R.string.download_description));
                 request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype));
 
-                // Show notification during and after download
                 request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-
-                // Set the destination directory for the downloaded file
                 request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype));
 
                 try {
@@ -307,24 +294,19 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
         // Broadcast receiver to get the endpoint from the PushServiceImpl
         unifiedPushEndpointReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                // Now we receive all parts of the subscription
                 String endpoint = intent.getStringExtra("endpoint");
                 String p256dh = intent.getStringExtra("p256dh");
                 String auth = intent.getStringExtra("auth");
 
                 Log.d("WebToApk", "Received new UnifiedPush data. Endpoint: " + endpoint);
 
-                // Instead of a simple function call, we now create the full subscription JSON
-                // and pass it to a special function in our shim that will resolve the 'subscribe()' promise.
                 if (endpoint != null && p256dh != null && auth != null && webview != null) {
                     try {
                         JSONObject keys = new JSONObject();
-                        // Use the real keys received from the distributor
                         keys.put("p256dh", p256dh);
                         keys.put("auth", auth);
 
@@ -336,7 +318,6 @@ public class MainActivity extends AppCompatActivity {
                         String subscriptionJson = subscription.toString();
 
                         webview.post(() -> {
-                            // This JS function is defined in our new shim
                             String js = "if (typeof window.__shim_onNewEndpoint === 'function') { window.__shim_onNewEndpoint('" + subscriptionJson.replace("'", "\\'") + "'); }";
                             webview.evaluateJavascript(js, null);
                         });
@@ -347,7 +328,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
-        // Register the receiver with compatibility for different Android versions
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(unifiedPushEndpointReceiver, new IntentFilter("com.myexample.webtoapk.NEW_ENDPOINT"), RECEIVER_NOT_EXPORTED);
         } else {
@@ -356,13 +337,9 @@ public class MainActivity extends AppCompatActivity {
 
         if (edgeToEdge) {
             ViewCompat.setOnApplyWindowInsetsListener(mainLayout, (v, windowInsets) -> {
-                // Get the insets for system bars in hardware pixels.
                 Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-
-                // Get the device's screen density factor.
                 float density = v.getResources().getDisplayMetrics().density;
 
-                // Convert hardware pixels to density-independent CSS pixels.
                 float top = insets.top / density;
                 float bottom = insets.bottom / density;
                 float left = insets.left / density;
@@ -373,9 +350,6 @@ public class MainActivity extends AppCompatActivity {
                     top, bottom, left, right
                 ));
 
-                // Pass insets to WebView via CSS custom properties.
-                // These names are chosen to be close to the standard CSS env() variables.
-                // The web content can then use var(--safe-area-inset-top).
                 String js = String.format(java.util.Locale.US,
                     "document.documentElement.style.setProperty('--safe-area-inset-top', '%.2fpx');" +
                     "document.documentElement.style.setProperty('--safe-area-inset-bottom', '%.2fpx');" +
@@ -390,16 +364,13 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // TODO check https://stackoverflow.com/questions/18479519/how-to-save-restore-webview-state
         boolean stateRestored = false;
         if (savedInstanceState != null) {
-            // Restore the state of the WebView from the saved bundle.
             stateRestored = webview.restoreState(savedInstanceState) != null;
             if (stateRestored) Log.d("WebToApk", "Restored WebView state");
         }
 
         if (!stateRestored) {
-            // It's a fresh launch. Or broken old. Load the main URL.
             webview.loadUrl(mainURL);
         }
 
@@ -415,6 +386,18 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         LocalBroadcastManager.getInstance(this).registerReceiver(mediaActionReceiver, new IntentFilter(MediaPlaybackService.BROADCAST_MEDIA_ACTION));
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+            String newUrl = intent.getData().toString();
+            if (webview != null) {
+                webview.loadUrl(newUrl);
+            }
+        }
     }
 
     private void registerForUnifiedPush(final String vapidPublicKey) {
@@ -437,14 +420,11 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     Log.w("WebToApk", "No UnifiedPush distributor found or user cancelled.");
 
-                    // We must run UI and WebView operations on the main thread
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        // Show an informative dialog to the user
                         new AlertDialog.Builder(MainActivity.this)
                             .setTitle(R.string.push_distributor_required_title)
                             .setMessage(R.string.push_distributor_required_message)
                             .setPositiveButton(R.string.learn_more, (dialog, which) -> {
-                                // Open the UnifiedPush website for users to find distributors
                                 Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://unifiedpush.org/users/distributors/"));
                                 startActivity(browserIntent);
                             })
@@ -478,38 +458,16 @@ public class MainActivity extends AppCompatActivity {
         stopService(intent);
     }
 
-    // Save the state of the WebView (current URL, history, scroll position) during OOM kill
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         webview.saveState(outState);
     }
 
-    // TODO idk what do with this. rly need?
-    // @Override
-    // protected void onPause() {
-    //     super.onPause();
-    //     Log.d("WebToApk", "onPause");
-    //     if (webview != null) {
-    //         Log.d("WebToApk", "onPause 2");
-    //         webview.onPause();
-    //     }
-    // }
-    // @Override
-    // protected void onResume() {
-    //     super.onResume();
-    //     Log.d("WebToApk", "onResume");
-    //     if (webview != null) {
-    //         Log.d("WebToApk", "onResume 2");
-    //         webview.onResume();
-    //     }
-    // }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        // Check if ALL permissions in the array are granted
         boolean isGranted = true;
         if (grantResults.length == 0) {
             isGranted = false;
@@ -522,7 +480,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Handle Camera/Mic
         if (requestCode == MEDIA_PERMISSION_REQUEST_CODE) {
             if (currentPermissionRequest != null) {
                 if (isGranted) {
@@ -533,27 +490,24 @@ public class MainActivity extends AppCompatActivity {
                 currentPermissionRequest = null;
             }
         }
-        // Handle Location (Re-using the ID or creating a new one)
         else if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (geoCallback != null) {
-                if (isGranted) {
-                    // Tell WebView that permission is granted
-                    geoCallback.invoke(geoOrigin, true, false);
-                } else {
-                    // Tell WebView that permission is denied
-                    geoCallback.invoke(geoOrigin, false, false);
-                }
+                geoCallback.invoke(geoOrigin, isGranted, false);
                 geoCallback = null;
                 geoOrigin = null;
             }
         }
+        else if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            final boolean granted = isGranted;
+            if (webview != null) {
+                webview.post(() -> {
+                    String js = "if (typeof window.__onNotificationPermissionResult === 'function') { window.__onNotificationPermissionResult(" + granted + "); }";
+                    webview.evaluateJavascript(js, null);
+                });
+            }
+        }
     }
 
-
-    /* This allows:
-        Remove "Confirm URL" title from js log/alert/dialog/confirm
-        Open HTML5 video in fullscreen
-    */
     private class CustomWebChrome extends WebChromeClient {
 
         @Override
@@ -566,7 +520,6 @@ public class MainActivity extends AppCompatActivity {
                 src = src.substring(8);
                 Log.e("WebToApk", "[" + src + ":" + line + "] " + msg);
             } else {
-                // User scripts colorful
                 switch (consoleMessage.messageLevel()) {
                     case ERROR:
                         Log.e("WebToApk", "\033[0;31m[" + src + ":" + line  +"] " + msg + "\033[0m");
@@ -656,18 +609,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                // Permission missing. Save callback and ask User.
                 geoCallback = callback;
                 geoOrigin = origin;
                 ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
             } else {
-                // Permission already granted by OS. Proceed.
                 callback.invoke(origin, true, false);
             }
         }
 
-
-        //////////////////////
         private View mCustomView;
         private WebChromeClient.CustomViewCallback mCustomViewCallback;
         private int mOriginalOrientation;
@@ -706,7 +655,6 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-            // Закрываем предыдущий callback если есть
             if (mFilePathCallback != null) {
                 mFilePathCallback.onReceiveValue(null);
             }
@@ -716,7 +664,6 @@ public class MainActivity extends AppCompatActivity {
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("image/*");
 
-            // Проверяем параметры файлового диалога
             String[] acceptTypes = fileChooserParams.getAcceptTypes();
             if (acceptTypes.length > 0 && acceptTypes[0] != null && !acceptTypes[0].isEmpty()) {
                 if (acceptTypes[0].contains("image")) {
@@ -726,7 +673,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // Поддержка множественного выбора
             if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             }
@@ -746,8 +692,6 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPermissionRequest(final PermissionRequest request) {
-            // Check if feature is enabled in config
-            // If the site asks for video but cameraEnabled is false -> deny immediately
             for (String resource : request.getResources()) {
                 if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource) && !cameraEnabled) {
                     request.deny();
@@ -759,7 +703,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // Calculate which Android permissions correspond to the requested WebView resources
             List<String> permissionsNeeded = new ArrayList<>();
             for (String resource : request.getResources()) {
                 if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
@@ -775,10 +718,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (permissionsNeeded.isEmpty()) {
-                // We already have all OS permissions, grant Web permission immediately
                 request.grant(request.getResources());
             } else {
-                // We are missing OS permissions. Save the request and ask the user.
                 currentPermissionRequest = request;
                 ActivityCompat.requestPermissions(MainActivity.this, permissionsNeeded.toArray(new String[0]), MEDIA_PERMISSION_REQUEST_CODE);
             }
@@ -791,15 +732,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
-    /**
-     * This allows for a splash screen
-     * Hide elements once the page loads
-     * Show custom error page
-     * Resolve issue with SSL certificate
-     **/
     private class CustomWebViewClient extends WebViewClient {
-        // Handle SSL issue
         @Override
         public void onReceivedSslError(WebView view, final SslErrorHandler handler, SslError error) {
             String failingUrl = error.getUrl();
@@ -830,17 +763,14 @@ public class MainActivity extends AppCompatActivity {
             dialog.show();
         }
 
-        // Handle HTTP Basic Auth
         @Override
         public void onReceivedHttpAuthRequest(final WebView view, final android.webkit.HttpAuthHandler handler, String host, String realm) {
-            // If basicAuth is set and valid, try to parse it
             if (MainActivity.this.basicAuth != null && !MainActivity.this.basicAuth.isEmpty()) {
                 String[] parts = MainActivity.this.basicAuth.split(":", 2);
                 if (parts.length == 2) {
                     String login = parts[0];
                     String password = parts[1];
 
-                    // Get main domain from mainURL to verify the host
                     String mainDomain = "";
                     try {
                         mainDomain = Uri.parse(MainActivity.this.mainURL).getHost();
@@ -851,7 +781,6 @@ public class MainActivity extends AppCompatActivity {
                     boolean domainIsValid = false;
                     if (mainDomain != null && !mainDomain.isEmpty() && host != null && !host.isEmpty()) {
                         if (MainActivity.this.allowSubdomains) {
-                            // Allow if the host ends with mainDomain (covers subdomains)
                             domainIsValid = host.endsWith(mainDomain) || mainDomain.endsWith(host);
                         } else {
                             domainIsValid = host.equals(mainDomain);
@@ -859,15 +788,12 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     if (domainIsValid) {
-                        // Credentials and domain are valid; proceed automatically
                         handler.proceed(login, password);
                         return;
                     }
                 }
             }
 
-            // Otherwise, show a custom dialog to prompt for credentials
-            // Inflate a custom layout with two EditText fields for username and password
             final View dialogView = getLayoutInflater().inflate(R.layout.auth_dialog, null);
             final EditText usernameInput = dialogView.findViewById(R.id.username);
             final EditText passwordInput = dialogView.findViewById(R.id.password);
@@ -878,7 +804,6 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("OK", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        // Retrieve user input and proceed with HTTP authentication
                         String user = usernameInput.getText().toString();
                         String pass = passwordInput.getText().toString();
                         handler.proceed(user, pass);
@@ -893,16 +818,13 @@ public class MainActivity extends AppCompatActivity {
                 .show();
         }
 
-        // Check for external link
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             String url = request.getUrl().toString();
 
-            // Check for non-standard URL scheme (external app)
             if (!url.startsWith("http://") && !url.startsWith("https://")) {
                 if (allowOpenMobileApp) {
                     if (confirmOpenExternalApp) {
-                        // Show confirmation dialog before opening external app
                         new AlertDialog.Builder(view.getContext())
                             .setTitle(R.string.external_link)
                             .setMessage(R.string.open_in_external_app)
@@ -910,7 +832,6 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void onClick(DialogInterface dialog, int which) {
                                     try {
-                                        // Try to launch an external Intent for the custom scheme
                                         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                                         view.getContext().startActivity(intent);
                                     } catch (ActivityNotFoundException e) {
@@ -921,7 +842,6 @@ public class MainActivity extends AppCompatActivity {
                             .setNegativeButton(android.R.string.no, null)
                             .show();
                     } else {
-                        // Open directly without confirmation
                         try {
                             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                             view.getContext().startActivity(intent);
@@ -932,31 +852,24 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     Log.d("WebToApk", "Opening URLs in external app is disabled: " + url);
                 }
-                return true; // Consume the event so that the WebView does not load this URL
+                return true;
             }
 
-            // Check if the URL is internal by comparing the host/domain
             String urlDomain = request.getUrl().getHost();
             String mainDomain = Uri.parse(mainURL).getHost();
 
-            // Safety check for malformed URLs
             if (urlDomain == null || mainDomain == null) {
                 return handleExternalLink(url, view);
             }
 
-            // Check if domains match (including subdomains if enabled)
             boolean isInternalLink;
             if (allowSubdomains) {
-                // Allow:
-                //   youtube.com -> m.youtube.com
-                //   m.youtube.com -> youtube.com
                 isInternalLink = urlDomain.endsWith(mainDomain) || mainDomain.endsWith(urlDomain);
             } else {
                 isInternalLink = urlDomain.equals(mainDomain);
             }
 
             if (isInternalLink) {
-                // Internal link: let the WebView load it normally
                 return false;
             }
 
@@ -965,7 +878,7 @@ public class MainActivity extends AppCompatActivity {
 
         private boolean handleExternalLink(String url, WebView view) {
             if (!enableExternalLinks) {
-                return true; // Block external links
+                return true;
             }
             if (openExternalLinksInBrowser) {
                 if (confirmOpenInBrowser) {
@@ -990,7 +903,6 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
             }
-            // Open in WebView
             Log.d("WebToApk", "\033[1;34mExternal link:\033[0m '" + url);
             return false;
         }
@@ -1001,7 +913,6 @@ public class MainActivity extends AppCompatActivity {
 
             if (blockLocalhostRequests && ("127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host) || "::1".equals(host) || "0:0:0:0:0:0:0:1".equals(host))) {
                 Log.d("WebToApk", "Blocked access to localhost resource: " + request.getUrl().toString());
-                // Empty answer
                 return new WebResourceResponse("text/plain", "UTF-8", null);
             }
 
@@ -1014,10 +925,8 @@ public class MainActivity extends AppCompatActivity {
             userScriptManager.injectScripts(webview, url);
         }
 
-        // Animation on app open
         @Override
         public void onPageFinished(WebView webview, String url) {
-            // Без флага errorOccurred у нас будет видно ошибку webview пока идёт анимация после tryAgain
             if (!errorOccurred) {
                 Log.d("WebToApk","Current page: " + url);
                 spinner.setVisibility(View.GONE);
@@ -1028,7 +937,6 @@ public class MainActivity extends AppCompatActivity {
             super.onPageFinished(webview, url);
         }
 
-        // Show custom error page with `tryAgain` button
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             String errorDescription = error.getDescription().toString();
@@ -1084,7 +992,6 @@ public class MainActivity extends AppCompatActivity {
             startActivity(getIntent());
             return true;
         }
-
     }
 
     boolean doubleBackToExitPressedOnce = false;
@@ -1110,7 +1017,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /* Retry Loading the page */
     public void tryAgain(View v) {
         parentLayout.removeView(errorLayout);
         parentLayout.addView(mainLayout);
@@ -1120,7 +1026,6 @@ public class MainActivity extends AppCompatActivity {
         webview.reload();
     }
 
-    // JS API
     private class WebAppInterface {
         private Context context;
 
@@ -1155,14 +1060,12 @@ public class MainActivity extends AppCompatActivity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 return ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
             }
-            // On older versions, permission is implicitly granted at install time.
             return true;
         }
 
         @JavascriptInterface
         public void requestNotificationPermission() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                // We need to run this on the main thread
                 new Handler(Looper.getMainLooper()).post(() -> {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST_CODE);
@@ -1175,60 +1078,84 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void showNotification(String title, String message) {
-            // This check is crucial for Android 13+
+        public void showNotification(String title, String message, String deepLink) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    Log.w("WebToApk", "Notification permission not granted. Cannot show notification.");
-                    // Optionally, inform the user via a Toast that permission is needed.
-                    new Handler(Looper.getMainLooper()).post(() -> Toast.makeText(context, "Notification permission is required", Toast.LENGTH_LONG).show());
+                    Log.w("WebToApk", "Notification permission not granted.");
                     return;
                 }
             }
 
-            // Create an intent to open the app when the notification is tapped
             Intent intent = new Intent(context, MainActivity.class);
+            if (deepLink != null && !deepLink.isEmpty()) {
+                intent.setAction(Intent.ACTION_VIEW);
+                intent.setData(Uri.parse(deepLink));
+            }
             intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+            
+            PendingIntent pendingIntent = PendingIntent.getActivity(context, (int) System.currentTimeMillis(), intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher) // Use a default launcher icon
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setContentIntent(pendingIntent) // Set the intent that will fire when the user taps the notification
-                .setAutoCancel(true); // Automatically removes the notification when the user taps it
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true);
 
             NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-
-            // Using system time is a simple way to get a unique ID for each notification
             notificationManager.notify((int) System.currentTimeMillis(), builder.build());
-            Log.d("WebToApk", "Showing notification: " + title);
+        }
+
+        @JavascriptInterface
+        public void scheduleNotification(int id, long delayMs, String title, String message, String deepLink) {
+            AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(context, ScheduledNotificationReceiver.class);
+            intent.putExtra("id", id);
+            intent.putExtra("title", title);
+            intent.putExtra("message", message);
+            intent.putExtra("deepLink", deepLink);
+
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            long triggerTime = SystemClock.elapsedRealtime() + delayMs;
+
+            if (alarmManager != null) {
+                alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerTime, pendingIntent);
+                Log.d("WebToApk", "Scheduled notification " + id + " for " + delayMs + "ms");
+            }
+        }
+
+        @JavascriptInterface
+        public void cancelScheduledNotification(int id) {
+            AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            Intent intent = new Intent(context, ScheduledNotificationReceiver.class);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            if (alarmManager != null) {
+                alarmManager.cancel(pendingIntent);
+                Log.d("WebToApk", "Cancelled notification " + id);
+            }
+        }
+
+        @JavascriptInterface
+        public void cancelAllScheduledNotifications() {
+            Log.w("WebToApk", "cancelAllScheduledNotifications invoked but not robustly supported via explicit Intents without persistent tracking.");
         }
 
         @JavascriptInterface
         public void share(String title, String text, String url) {
             Log.d("WebToApk", "Share: " + title + " :: " +  text +" " + url);
-            // Make Intent
             Intent shareIntent = new Intent(Intent.ACTION_SEND);
             shareIntent.setType("text/plain");
-            String shareBody = (text != null ? text : "")
-                                + ((url != null && !url.isEmpty()) ? "\n" + url : "");
+            String shareBody = (text != null ? text : "") + ((url != null && !url.isEmpty()) ? "\n" + url : "");
             shareIntent.putExtra(Intent.EXTRA_SUBJECT, title);
             shareIntent.putExtra(Intent.EXTRA_TEXT, shareBody);
 
-            // Show chooser
             context.startActivity(
                 Intent.createChooser(shareIntent, title == null ? "Share" : title)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             );
         }
 
-
-        /**
-         * Called by the JS shim to trigger the UnifiedPush registration flow.
-         * @param vapidPublicKey The Base64 URL-encoded VAPID public key from the web app.
-         */
         @JavascriptInterface
         public void unifiedPushSubscribe(String vapidPublicKey) {
             new Handler(Looper.getMainLooper()).post(() -> {
@@ -1237,22 +1164,12 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        /**
-         * Called by the JS shim to unsubscribe from a push subscription.
-         * The shim doesn't manage multiple instances, so we use the default.
-         */
         @JavascriptInterface
         public void unifiedPushUnregister() {
             Log.d("WebToApk", "JS shim triggered UnifiedPush un-registration for default instance.");
             UnifiedPush.unregister(context, INSTANCE_DEFAULT);
         }
 
-
-        /**
-         * Returns the current subscription object as a JSON string for the shim.
-         * This includes the endpoint and dummy keys expected by the Push API.
-         * Returns an empty string if not subscribed.
-         */
         @JavascriptInterface
         public String getUnifiedPushSubscriptionJson() {
             SharedPreferences prefs = context.getSharedPreferences("unifiedpush", Context.MODE_PRIVATE);
@@ -1265,7 +1182,6 @@ public class MainActivity extends AppCompatActivity {
             }
 
             try {
-                // We construct a JSON object that mimics the standard PushSubscription.toJSON() output.
                 JSONObject keys = new JSONObject();
                 keys.put("p256dh", p256dh);
                 keys.put("auth", auth);
@@ -1282,28 +1198,18 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        /**
-         * Returns the state of the notification permission for the shim.
-         * "granted", "denied", or "prompt".
-         */
         @JavascriptInterface
         public String getNotificationPermissionState() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
                     return "granted";
                 } else {
-                    // If we should show a rationale, it means the user has denied it once but can be asked again.
-                    // This is the "prompt" state from the web API's perspective.
                     if (ActivityCompat.shouldShowRequestPermissionRationale((Activity) context, Manifest.permission.POST_NOTIFICATIONS)) {
                          return "prompt";
                     }
-                    // If no rationale, it's either the first time ("prompt") or permanently denied ("denied").
-                    // For simplicity, we can't easily distinguish "denied" from "first-time-prompt" without more state tracking.
-                    // Returning "prompt" is a safe default for the shim.
                     return "prompt";
                 }
             }
-            // On older versions, permission is granted at install time.
             return "granted";
         }
 
@@ -1355,4 +1261,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static class ScheduledNotificationReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int id = intent.getIntExtra("id", 0);
+            String title = intent.getStringExtra("title");
+            String message = intent.getStringExtra("message");
+            String deepLink = intent.getStringExtra("deepLink");
+
+            Intent activityIntent = new Intent(context, MainActivity.class);
+            if (deepLink != null && !deepLink.isEmpty()) {
+                activityIntent.setAction(Intent.ACTION_VIEW);
+                activityIntent.setData(Uri.parse(deepLink));
+            }
+            activityIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            
+            PendingIntent pendingIntent = PendingIntent.getActivity(context, id, activityIntent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true);
+
+            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            }
+            
+            notificationManager.notify(id, builder.build());
+        }
+    }
 }
