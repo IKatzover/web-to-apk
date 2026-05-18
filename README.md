@@ -13,6 +13,8 @@ A simple tool to convert any website into an Android APK without requiring Andro
 
 ## Quick Start 
 
+(please note that i have yet to properly test the newest changes)
+
 1. Clone this repository:
 
 ```bash

@@ -902,6 +902,40 @@ check() {
     log "All checks passed successfully"
 }
 
+
+create_config() {
+    local output="${1:-webapk.conf}"
+
+    if [ -f "$output" ]; then
+        warn "$output already exists"
+        read -p "Overwrite it? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            info "Cancelled"
+            return 1
+        fi
+    fi
+
+    cat > "$output" << 'EOF'
+id = com.myapp.webtoapk             # Application ID (will be com.myapp.webtoapk)
+name = My App Name                  # Display name of the app
+mainURL = https://example.com       # Target website URL
+icon = example.png                  # Path to your app icon (PNG format)
+
+allowSubdomains = true              # Allow navigation between example.com and sub.example.com
+requireDoubleBackToExit = true      # Require double back press to exit app
+
+enableExternalLinks = true          # Allow external links
+openExternalLinksInBrowser = true   # If allowed: open external links in browser or WebView
+confirmOpenInBrowser = true         # Show confirmation before opening external browser
+
+allowOpenMobileApp = false          # Block external app links/schemes
+EOF
+
+    log "Created configuration file: $output"
+}
+
+
 ###############################################################################
 
 ORIGINAL_PWD="$PWD"
@@ -959,6 +993,7 @@ if [ $# -eq 0 ]; then
     echo -e "  ${BLUE}$0 test${NC}            - Install and test APK via adb, show logs"
     echo -e "  ${BLUE}$0 clean${NC}           - Clean build files, reset settings"
     echo -e "  ${BLUE}$0 check${NC}           - Validate environment and project setup"
+    echo -e "  ${BLUE}$0 create_config${NC}   - Create a default webapk.conf"
     echo
     echo -e "  ${BLUE}$0 apk${NC}             - Build APK without apply_config"
     echo -e "  ${BLUE}$0 apply_config${NC}    - Apply settings from config file"
