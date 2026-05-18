@@ -54,7 +54,7 @@ try() {
 
 
 set_var() {
-    local java_file="app/src/main/java/com/$appname/webtoapk/MainActivity.java"
+    local java_file="app/src/main/java/$(echo "$full_appname" | tr '.' '/')/MainActivity.java"
     [ ! -f "$java_file" ] && error "MainActivity.java not found"
 
     local pattern="$@"
@@ -808,6 +808,100 @@ build() {
     apk
 }
 
+check() {
+    info "Running environment and project checks..."
+
+    local missing=0
+
+    # -------------------------
+    # Required system commands
+    # -------------------------
+    local deps=(java wget unzip keytool)
+    for cmd in "${deps[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            warn "Missing dependency: $cmd"
+            missing=1
+        fi
+    done
+
+    # adb is optional but useful
+    if ! command -v adb >/dev/null 2>&1; then
+        warn "ADB not found (test command will not work)"
+    fi
+
+    # -------------------------
+    # Java validation
+    # -------------------------
+    if command -v java >/dev/null 2>&1; then
+        java_version=$(java -version 2>&1 | head -n 1 | cut -d'"' -f2 | cut -d'.' -f1)
+        if [ "$java_version" != "17" ]; then
+            warn "Java version is $java_version (required: 17)"
+            missing=1
+        else
+            log "Java 17 OK"
+        fi
+    else
+        warn "Java not installed"
+        missing=1
+    fi
+
+    # -------------------------
+    # Android environment
+    # -------------------------
+    if [ -z "${ANDROID_HOME:-}" ]; then
+        warn "ANDROID_HOME is not set"
+        missing=1
+    elif [ ! -d "$ANDROID_HOME" ]; then
+        warn "ANDROID_HOME points to missing directory: $ANDROID_HOME"
+        missing=1
+    else
+        log "ANDROID_HOME OK"
+    fi
+
+    # -------------------------
+    # Gradle wrapper
+    # -------------------------
+    if [ ! -x "./gradlew" ]; then
+        warn "gradlew not found or not executable"
+        missing=1
+    else
+        log "Gradle wrapper OK"
+    fi
+
+    # -------------------------
+    # Project structure checks
+    # -------------------------
+    if [ ! -f "app/build.gradle" ]; then
+        warn "Missing app/build.gradle"
+        missing=1
+    fi
+
+    if ! grep -q 'applicationId "' app/build.gradle 2>/dev/null; then
+        warn "applicationId not found in build.gradle"
+        missing=1
+    else
+        log "applicationId OK"
+    fi
+
+    if [ ! -d "app/src/main" ]; then
+        warn "Missing Android source directory"
+        missing=1
+    fi
+
+    # -------------------------
+    # SDK tools (optional but useful)
+    # -------------------------
+    if [ ! -d "${ANDROID_HOME:-}/platform-tools" ]; then
+        warn "Android platform-tools missing"
+    fi
+
+    if [ $missing -eq 1 ]; then
+        error "Check failed: missing or misconfigured dependencies detected"
+    fi
+
+    log "All checks passed successfully"
+}
+
 ###############################################################################
 
 ORIGINAL_PWD="$PWD"
@@ -864,6 +958,7 @@ if [ $# -eq 0 ]; then
     echo -e "  ${BLUE}$0 build${NC} [config]  - Apply configuration and build"
     echo -e "  ${BLUE}$0 test${NC}            - Install and test APK via adb, show logs"
     echo -e "  ${BLUE}$0 clean${NC}           - Clean build files, reset settings"
+    echo -e "  ${BLUE}$0 check${NC}           - Validate environment and project setup"
     echo
     echo -e "  ${BLUE}$0 apk${NC}             - Build APK without apply_config"
     echo -e "  ${BLUE}$0 apply_config${NC}    - Apply settings from config file"
